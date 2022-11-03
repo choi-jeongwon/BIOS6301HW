@@ -1,0 +1,288 @@
+---
+title: 'Bios 6301: Assignment 7'
+author: "Jeongwon Choi"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+*Due Thursday, 03 November, 1:00 PM*
+
+$5^{n=day}$ points taken off for each day late.
+
+40 points total.
+
+Submit a single knitr file (named `homework7.rmd`), along with a valid PDF output file. Inside the file, clearly indicate which parts of your responses go with which problems (you may use the original homework document as a template). Add your name as `author` to the file's metadata section. Raw R code/output or word processor files are not acceptable.
+
+Failure to name file `homework7.rmd` or include author name may result in 5 points taken off.
+
+```{r}
+library(tidyverse)
+```
+
+### Question 1 ###
+
+**21 points**
+
+Use the following code to generate data for patients with repeated measures of A1C (a test for levels of blood glucose).
+
+```{r}
+genData <- function(n) {
+    if(exists(".Random.seed", envir = .GlobalEnv)) {
+        save.seed <- get(".Random.seed", envir= .GlobalEnv)
+        on.exit(assign(".Random.seed", save.seed, envir = .GlobalEnv))
+    } else {
+        on.exit(rm(".Random.seed", envir = .GlobalEnv))
+    }
+    set.seed(n)
+    subj <- ceiling(n / 10)
+    id <- sample(subj, n, replace=TRUE)
+    times <- as.integer(difftime(as.POSIXct("2005-01-01"), as.POSIXct("2000-01-01"), units='secs'))
+    dt <- as.POSIXct(sample(times, n), origin='2000-01-01')
+    mu <- runif(subj, 4, 10)
+    a1c <- unsplit(mapply(rnorm, tabulate(id), mu, SIMPLIFY=FALSE), id)
+    data.frame(id, dt, a1c)
+}
+x <- genData(500)
+```
+
+Perform the following manipulations: (3 points each)
+
+1. Order the data set by `id` and `dt`.
+```{r}
+x <- x[order(x$id, x$dt),]
+rownames(x) <- NULL
+head(x)
+```
+
+2. For each `id`, determine if there is more than a one year gap in between observations.  Add a new row at the one year mark, with the `a1c` value set to missing.  A two year gap would require two new rows, and so forth.
+```{r}
+
+# making a loop that calculates the number of days between the lab test
+x$gap <- 0
+for (i in 2:nrow(x)) {
+  if(x$id[i-1]==x$id[i]){
+  x$gap[[i]]=x$dt[i]-x$dt[i-1]
+  }
+}
+
+# mark refers to the year between the lab tests
+x$mark <- x$gap %/% 365
+head(x)
+
+#assigning the one year mark to a new row
+library(tidyverse)
+x$idx <- 1:nrow(x)
+
+head(x)
+nr <-nrow(x)
+
+for (i in 1:nr){
+ this_idx <- which(x$idx==i)
+ this_mark <- x[this_idx, "mark"]
+ if(this_mark==0 ){
+   next} else{
+for (j in 1:this_mark){
+  
+  new.dt <- x[this_idx-1,'dt']+as.difftime(365,units="days")
+  x <- x %>% add_row(id=x[this_idx, "id"], dt=new.dt, a1c=NA, .before=this_idx)
+  # x[this_idx-1,'gap'] <- x$dt[this_idx-1]-x$dt[this_idx-2]
+  x$gap[[this_idx]] =  x$dt[this_idx]-x$dt[this_idx-1]
+}
+}
+}
+x
+
+
+```
+
+3. Create a new column `visit`.  For each `id`, add the visit number.  This should be 1 to `n` where `n` is the number of observations for an individual.  This should include the observations created with missing a1c values.
+```{r}
+library(tidyverse)
+x$visit <- NULL
+uniqueid <- unique(x$id)
+for (i in uniqueid) {
+  this_id <- which(x$id==i)
+  count_this_id <- length(this_id)
+  x[this_id,'visit'] <- 1:count_this_id
+}
+```
+
+4. For each `id`, replace missing values with the mean `a1c` value for that individual.
+```{r}
+#create a mean a1c value
+mean_a1c <- x %>%
+group_by(id) %>%
+summarize(Mean = mean(a1c, na.rm=TRUE))
+mean_a1c
+
+#replace NA with the mean
+uniqueid2 <- unique(x$id)
+missingidx <- is.na(x$a1c)
+
+for(i in uniqueid2) {
+  this_id2 <- x$id==i
+  both <- this_id2 & missingidx
+  x[both,'a1c'] <- mean_a1c[i,'Mean']
+}
+```
+
+5. Print mean `a1c` for each `id`.
+```{r}
+x %>%
+group_by(id) %>%
+summarize(Mean = mean(a1c))
+mean_a1c
+```
+
+6. Print total number of visits for each `id`.
+```{r}
+lastobs <- x %>%
+  group_by(id) %>%
+  summarise_all(last)
+
+lastobs[,c(1,7)]
+```
+
+7. Print the observations for `id = 15`.
+```{r}
+x[x$id == 15,]
+```
+
+
+
+### Question 2 ###
+
+**16 points**
+
+Install the `lexicon` package. Load the `sw_fry_1000` vector, which contains 1,000 common words.
+
+```{r}
+library(lexicon)
+data('sw_fry_1000', package = 'lexicon')
+head(sw_fry_1000)
+```
+
+1. Remove all non-alphabetical characters and make all characters lowercase. Save the result as `a`.
+
+```{r}
+a1 <- tolower(sw_fry_1000)
+a <- gsub("[^a-z]", "", a1)
+```
+
+Use vector `a` for the following questions. (2 points each)
+
+2. How many words contain the string "ar"?
+
+```{r}
+length(grep("ar", a, value=TRUE))
+```
+64 words contain the string "ar". 
+
+3. Find a six-letter word that starts with "l" and ends with "r".
+
+```{r}
+b1 <- grep("^l", a, value=TRUE)
+b2 <- grep("r$", b1, value=TRUE)
+str_length(b2)
+```
+letter starts with "l" and ends with "r".
+
+4. Return all words that start with "col" or end with "eck".
+
+```{r}
+grep("^col|eck$",a, value=TRUE)
+```
+
+5. Find the number of words that contain 4 or more adjacent consonants. Assume "y" is always a consonant.
+
+```{r}
+length(grep("[^aeiou]{4}", a, value=TRUE))
+```
+8 words contain 4 or more adjacent consonants
+
+
+6. Return all words with a "q" that isn't followed by a "ui".
+
+```{r}
+c1 <- grep("[q]", a, value=TRUE)
+idx <- grep("[q](!?ui)", c1)
+c1[-idx]
+```
+
+7. Find all words that contain a "k" followed by another letter. Run the `table` command on the first character following the first "k" of each word.
+
+```{r}
+# I first find words that contain a "k" followed by another letter
+d <- grep("[k].+[[:alpha:]]", a, value=TRUE)
+# Then split words into a vector of letters
+d1 <- strsplit(d, '')
+# For vector d1, find where k is located within a word
+d2 <- unlist(lapply(d1, function(x){y= x=='k'; return(which(y))}))
+
+# Make a loop with the location of k, return the letter followed by k. 
+d3 <- c()
+for (i in 1:length(d2)){
+  d3<- c( d3,d1[[i]][d2[i]+1])
+}
+
+# Make a table with d3.
+table(d3)
+```
+
+8. Remove all vowels. How many character strings are found exactly once?
+
+```{r}
+e1 <- gsub("[aeiou]", '', a)
+sum(table(e1)==1)
+```
+581 character strings are found once.
+
+
+### Question 3 ###
+
+**3 points**
+
+The first argument to most functions that fit linear models are formulas.  The following example defines the response variable `death` and allows the model to incorporate all other variables as terms. `.` is used to mean all columns not otherwise in the formula.
+l
+```{r}
+# I changed the dataset because error message came out
+haart_df <- read.csv('~/downloads/haart.csv')[,c('death','weight','hemoglobin','cd4baseline')]
+coef(summary(glm(death ~ ., data=haart_df, family=binomial(logit))))
+```
+
+Now imagine running the above several times, but with a different response and data set each time.  Here's a function:
+
+```{r}
+myfun <- function(dat, response) {
+  form <- as.formula(response ~ .)
+  coef(summary(glm(form, data=dat, family=binomial(logit))))
+}
+```
+
+Unfortunately, it doesn't work. `tryCatch` is "catching" the error so that this file can be knit to PDF.
+
+```{r}
+tryCatch(myfun(haart_df, death), error = function(e) e)
+```
+
+
+What do you think is going on?  Consider using `debug` to trace the problem.
+
+The 'response' argument in the myfun function is not recognized as an object. So it doesn't work because R cannot recognize the variable such as death or hemoglobin, which makes it impossible to form a new function.
+
+
+**5 bonus points**
+
+Create a working function.
+```{r}
+myfun_new <- function(dat, response) {
+  form <- as.formula( paste0(substitute(response), "~.")  )
+  coef(summary(glm(form, data=dat, family=binomial(logit))))
+}
+
+myfun_new(haart_df, death)
+```
+
+So in this case, I included subsitute(response) so that the function could recognize the response variable name as a symbol for formula and use that symbol to create a formula.
